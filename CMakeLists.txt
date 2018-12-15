@@ -1,0 +1,7 @@
+cmake_minimum_required (VERSION 2.8)
+set (CMAKE_BUILD_TYPE Debug)
+set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+project (encoder)
+find_package (OpenCV REQUIRED)
+add_executable (encoder encoder.cpp)
+target_link_libraries (encoder ${OpenCV_LIBS})
