@@ -20,14 +20,40 @@ bool checkCoeff(const Mat& src) {
     return false;
 }
 
+void zigzagStep(int &x, int &y, bool &flag) {
+    if (flag == ASCEND) {
+        if (x == 0 || y == 7) {
+            flag = DESCEND;
+            if (y == 7) x++;
+            else y++;
+        }
+        else {
+            x--;
+            y++;
+        }
+    }
+    else {
+        if (y == 0 || x == 7) {
+            flag = ASCEND;
+            if (x == 7) y++;
+            else x++;
+        }
+        else {
+            y--;
+            x++;
+        }
+    }
+}
+
 void fixedEncodeBlock(const Mat& src, ofstream& ofs) {
     int x = 0, y = 0;
     int run = 0;
     bool flag = ASCEND;
-    while (x > 8 && y > 8) {
-        // deal with value
+    int t = 64;
+    while (t--) {
+        // deal with run value
         int value = src.at<float_t>(x, y);
-        if (value != 0) {
+        if (value != 0 || (x == 0 && y == 0)) {
             string s_run = bitset<6>(run).to_string();
             string s_value = bitset<8>(value).to_string();
             ofs << s_run << s_value;
@@ -37,21 +63,10 @@ void fixedEncodeBlock(const Mat& src, ofstream& ofs) {
             run++;
         
         // update index in zigzag way
-        if (flag == ASCEND) {
-            if (x == 0)
-                flag = DESCEND;
-            else
-                x--;
-            y++;
-        }
-        else {
-            if (y == 0)
-                flag = ASCEND;
-            else
-                y--;
-            x++;
-        }
+        zigzagStep(x, y, flag);
     }
+    ofs << endl;
+    cout << "end of block." << endl;
 }
 
 int main(void) {
@@ -62,13 +77,18 @@ int main(void) {
     cout << "length: " << img_cols << endl;
     cout << "width: " << img_rows << endl;
 
+    // create a frame cache
+    Mat cache_img = Mat::zeros(img.size(), img.type());
+
     // create encode file
     ofstream ofs;
     ofs.open("code/0001.txt", ofstream::out);
 
     // insert picture infomation
     string PN = "00000001";
-    ofs << PN;
+    string PL = bitset<10>(img_cols).to_string();
+    string PW = bitset<10>(img_rows).to_string();
+    ofs << PN << endl << PL << endl << PW << endl;
 
     // convert color space
     Mat YcrcbImg = Mat::zeros(Size(img_rows, img_cols), img.type());
@@ -85,10 +105,10 @@ int main(void) {
         for (int j = 0; j < mb_cols; j++) {
             cout << "dealing macroblock " << i << ", " << j << endl;
             // set macroblock header
-            string MN = bitset<8>(mb_count).to_string();
+            string MN = bitset<12>(mb_count).to_string();
             string MTYPE = "01";
             string MQUANT = "01000";
-            ofs << MN << MTYPE << MQUANT;
+            ofs << MN << endl << MTYPE << endl << MQUANT << endl;
 
             // get macroblock data
             Mat mb(YcrcbImg, Rect(j * 16, i * 16, 16, 16));
@@ -110,8 +130,8 @@ int main(void) {
             cout << "extract y, cr, cb success." << endl;
 
             // motion detect
-            string MV = "00000";
-            ofs << MV;
+            string MV = "000000000000";
+            ofs << MV << endl;
 
             // do DCT transform
             Mat dct_y, dct_cr, dct_cb;
@@ -121,17 +141,29 @@ int main(void) {
             cout << "dct transform success." << endl;
 
             // quantization
-            Mat quant_y(16, 16, CV_32F);
-            Mat quant_cr(16, 16, CV_32F);
-            Mat quant_cb(16, 16, CV_32F);
-            quant_y = dct_y / 8;
-            quant_cr = dct_cr / 8;
-            quant_cb = dct_cb / 8;
+            Mat quant_y = Mat::zeros(Size(16, 16), CV_32F);
+            Mat quant_cr = Mat::zeros(Size(8, 8), CV_32F);
+            Mat quant_cb = Mat::zeros(Size(8, 8), CV_32F);
+            for (int k = 0; k < 16; k++) {
+                for (int l = 0; l < 16; l++) {
+                    quant_y.at<float_t>(k, l) = round(dct_y.at<float_t>(k, l) / 8);
+                }
+            }
+            for (int k = 0; k < 8; k++) {
+                for (int l = 0; l < 8; l++) {
+                    quant_cr.at<float_t>(k, l) = round(dct_cr.at<float_t>(k, l) / 8);
+                    quant_cb.at<float_t>(k, l) = round(dct_cb.at<float_t>(k, l) / 8);
+                }
+            }
+            // Mat quant_y, quant_cr, quant_cb;
+            // quant_y = dct_y / 8;
+            // quant_cr = dct_cr / 8;
+            // quant_cb = dct_cb / 8;
 
             // split quant_y
             Mat quant_y_1(quant_y, Rect(0, 0, 8, 8));
-            Mat quant_y_2(quant_y, Rect(0, 8, 8, 8));
-            Mat quant_y_3(quant_y, Rect(8, 0, 8, 8));
+            Mat quant_y_2(quant_y, Rect(8, 0, 8, 8));
+            Mat quant_y_3(quant_y, Rect(0, 8, 8, 8));
             Mat quant_y_4(quant_y, Rect(8, 8, 8, 8));
 
             // check CBP
@@ -144,7 +176,7 @@ int main(void) {
             int cbp_count = 32 * quant_y_1_flag + 16 * quant_y_2_flag + 8 * quant_y_3_flag + 
                             4 * quant_y_4_flag + 2 * quant_cb_flag + 1 * quant_cr_flag;
             string CBP = bitset<6>(cbp_count).to_string();
-            ofs << CBP;
+            ofs << CBP << endl;
             cout << "check CBP success." << endl;
 
             // vlc encode coefficient
@@ -155,15 +187,62 @@ int main(void) {
             fixedEncodeBlock(quant_cb, ofs);
             fixedEncodeBlock(quant_cr, ofs);
 
+            /******************************
+                resconstruct for cache 
+            *******************************/
+            // inverse quantization
+            // Mat i_dct_y = Mat::zeros(Size(16, 16), CV_32F);
+            // Mat i_dct_cr = Mat::zeros(Size(8, 8), CV_32F);
+            // Mat i_dct_cb = Mat::zeros(Size(8, 8), CV_32F);
+            // for (int k = 0; k < 16; k++) {
+            //     for (int l = 0; l < 16; l++) {
+            //         i_dct_y.at<float_t>(k, l) = round(quant_y.at<float_t>(k, l)) * 8;
+            //     }
+            // }
+            // for (int k = 0; k < 8; k++) {
+            //     for (int l = 0; l < 8; l++) {
+            //         i_dct_cr.at<float_t>(k, l) = round(quant_cr.at<float_t>(k, l)) * 8;
+            //     }
+            // }
+            // for (int k = 0; k < 8; k++) {
+            //     for (int l = 0; l < 8; l++) {
+            //         i_dct_cb.at<float_t>(k, l) = round(quant_cb.at<float_t>(k, l)) * 8;
+            //     }
+            // }
+            Mat i_dct_y, i_dct_cr, i_dct_cb;
+            i_dct_y = quant_y * 8;
+            i_dct_cr = quant_cr * 8;
+            i_dct_cb = quant_cb * 8;
+
+            // inverse dct
+            Mat i_y, i_cr, i_cb;
+            dct(i_dct_y, i_y, cv::DCT_INVERSE);
+            dct(i_dct_cr, i_cr, cv::DCT_INVERSE);
+            dct(i_dct_cb, i_cb, cv::DCT_INVERSE);
+
+            // assign to cache frame
+            Mat cache_mb(cache_img, Rect(j * 16, i * 16, 16, 16));
+            for (int row = 0; row < 16; row++) {
+                for (int col = 0; col < 16; col++) {
+                    // 4:1:1 upsampling
+                    cache_mb.at<Vec3b>(row, col)[0] = i_y.at<float_t>(row, col);
+                    cache_mb.at<Vec3b>(row, col)[1] = i_cr.at<float_t>(row / 2, col / 2);
+                    cache_mb.at<Vec3b>(row, col)[2] = i_cb.at<float_t>(row / 2, col / 2);
+                }
+            }
+
             mb_count++;
         }
     }
 
     ofs.close();
 
-    // namedWindow("image", WINDOW_AUTOSIZE);
-    // imshow("image", mb);
-    // waitKey(0);
+    // covert color space for cache frame
+    cvtColor(cache_img, cache_img, COLOR_YCrCb2RGB);
+
+    namedWindow("image", WINDOW_AUTOSIZE);
+    imshow("image", cache_img);
+    waitKey(0);
     
     return 0;
 };
