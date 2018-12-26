@@ -52,5 +52,8 @@ bin
 # output files
 code
 
+# rebuild files
+rebuild
+
 # vscode setting
 .vscode
