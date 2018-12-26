@@ -51,9 +51,9 @@ void decodeFixedBlock(Mat& block, ifstream& ifs) {
             zigzagStep(x, y, flag);
         }
         // assign the value
-        int value = bitset<8>(code.substr(0, 8)).to_ulong();
-        code.erase(0, 8);
-        value = value > 128 ? value - 256 : value;
+        int value = bitset<9>(code.substr(0, 9)).to_ulong();
+        code.erase(0, 9);
+        value = value > 256 ? value - 512 : value;
         block.at<float_t>(x, y) = value;
         zigzagStep(x, y, flag);
     }
@@ -143,10 +143,11 @@ int main(void) {
 
     Mat RGBImage;
     cv::cvtColor(img, RGBImage, cv::COLOR_YCrCb2RGB);
+    imwrite("rebuild/0001.jpg", RGBImage);
 
-    namedWindow("image", WINDOW_AUTOSIZE);
-    imshow("image", RGBImage);
-    waitKey(0);
+    // namedWindow("image", WINDOW_AUTOSIZE);
+    // imshow("image", RGBImage);
+    // waitKey(0);
 
     return 0;
 }
