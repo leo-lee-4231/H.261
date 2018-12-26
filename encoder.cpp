@@ -55,7 +55,7 @@ void fixedEncodeBlock(const Mat& src, ofstream& ofs) {
         int value = src.at<float_t>(x, y);
         if (value != 0 || (x == 0 && y == 0)) {
             string s_run = bitset<6>(run).to_string();
-            string s_value = bitset<8>(value).to_string();
+            string s_value = bitset<9>(value).to_string();
             ofs << s_run << s_value;
             run = 0;
         }
@@ -69,29 +69,32 @@ void fixedEncodeBlock(const Mat& src, ofstream& ofs) {
     cout << "end of block." << endl;
 }
 
-int main(void) {
+void iframeEncode(int num, Mat& cache_img) {
+    cout << "***** Encoding picture " << num << ". *****" << endl;
     // load image
-    Mat img = imread("img/0001.jpg");
+    string read_filename = "img/" + bitset<4>(num).to_string() + ".jpg";
+    Mat img = imread(read_filename);
     const int img_cols = img.cols;
     const int img_rows = img.rows;
     cout << "length: " << img_cols << endl;
     cout << "width: " << img_rows << endl;
 
-    // create a frame cache
-    Mat cache_img = Mat::zeros(img.size(), img.type());
+    // init frame cache
+    cache_img = Mat::zeros(img.size(), img.type());
 
     // create encode file
+    string output_filename = "code/" + bitset<4>(num).to_string() + ".txt";
     ofstream ofs;
     ofs.open("code/0001.txt", ofstream::out);
 
     // insert picture infomation
-    string PN = "00000001";
+    string PN = bitset<8>(num).to_string();
     string PL = bitset<10>(img_cols).to_string();
     string PW = bitset<10>(img_rows).to_string();
     ofs << PN << endl << PL << endl << PW << endl;
 
     // convert color space
-    Mat YcrcbImg = Mat::zeros(Size(img_rows, img_cols), img.type());
+    Mat YcrcbImg;
     cvtColor(img, YcrcbImg, COLOR_RGB2YCrCb);
 
     // for the macroblock
@@ -127,7 +130,6 @@ int main(void) {
                         cb.at<float_t>(row / 2, col / 2) = mb.at<Vec3b>(row, col)[2];
                 }
             }
-            cout << "extract y, cr, cb success." << endl;
 
             // motion detect
             string MV = "000000000000";
@@ -155,10 +157,6 @@ int main(void) {
                     quant_cb.at<float_t>(k, l) = round(dct_cb.at<float_t>(k, l) / 8);
                 }
             }
-            // Mat quant_y, quant_cr, quant_cb;
-            // quant_y = dct_y / 8;
-            // quant_cr = dct_cr / 8;
-            // quant_cb = dct_cb / 8;
 
             // split quant_y
             Mat quant_y_1(quant_y, Rect(0, 0, 8, 8));
@@ -191,24 +189,6 @@ int main(void) {
                 resconstruct for cache 
             *******************************/
             // inverse quantization
-            // Mat i_dct_y = Mat::zeros(Size(16, 16), CV_32F);
-            // Mat i_dct_cr = Mat::zeros(Size(8, 8), CV_32F);
-            // Mat i_dct_cb = Mat::zeros(Size(8, 8), CV_32F);
-            // for (int k = 0; k < 16; k++) {
-            //     for (int l = 0; l < 16; l++) {
-            //         i_dct_y.at<float_t>(k, l) = round(quant_y.at<float_t>(k, l)) * 8;
-            //     }
-            // }
-            // for (int k = 0; k < 8; k++) {
-            //     for (int l = 0; l < 8; l++) {
-            //         i_dct_cr.at<float_t>(k, l) = round(quant_cr.at<float_t>(k, l)) * 8;
-            //     }
-            // }
-            // for (int k = 0; k < 8; k++) {
-            //     for (int l = 0; l < 8; l++) {
-            //         i_dct_cb.at<float_t>(k, l) = round(quant_cb.at<float_t>(k, l)) * 8;
-            //     }
-            // }
             Mat i_dct_y, i_dct_cr, i_dct_cb;
             i_dct_y = quant_y * 8;
             i_dct_cr = quant_cr * 8;
@@ -239,6 +219,11 @@ int main(void) {
 
     // covert color space for cache frame
     cvtColor(cache_img, cache_img, COLOR_YCrCb2RGB);
+}
+
+int main(void) {
+    Mat cache_img;
+    iframeEncode(1, cache_img);
 
     namedWindow("image", WINDOW_AUTOSIZE);
     imshow("image", cache_img);
