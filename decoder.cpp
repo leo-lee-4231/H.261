@@ -59,10 +59,17 @@ void decodeFixedBlock(Mat& block, ifstream& ifs) {
     }
 }
 
-int main(void) {
+void iframeDecode(int num, Mat& cache_img) {
+    cout << "***** Decoding picture " << num << ". *****" << endl;
     // load code
+    stringstream ss;
+    ss << num;
+    string number = ss.str();
+    while (number.length() < 4)
+        number.insert(0, 1, '0');
+    string read_filename = "code/" + number + ".txt";
     ifstream ifs;
-    ifs.open("code/0001.txt", ifstream::in);
+    ifs.open(read_filename.c_str(), ifstream::in);
 
     // load PN, PL, PW
     string PN, PL, PW;
@@ -86,31 +93,38 @@ int main(void) {
         int mn = bitset<12>(MN).to_ulong();
         int mtype = bitset<2>(MTYPE).to_ulong();
         int mquant = bitset<5>(MQUANT).to_ulong();
-        int mvh = bitset<4>(MV.substr(0, 4)).to_ulong();
-        int mvv = bitset<4>(MV.substr(5, 4)).to_ulong();
+        int mvh = bitset<5>(MV.substr(0, 5)).to_ulong();
+        int mvv = bitset<5>(MV.substr(5)).to_ulong();
         int cbp = bitset<6>(CBP).to_ulong();
 
         // fix the sign of mv
         mvh = mvh > 16 ? mvh - 32 : mvh;
         mvv = mvv > 16 ? mvv - 32 : mvv;
 
+        // create macro block coeffient container
         Mat quant_y = Mat::zeros(Size(16, 16), CV_32F);
         Mat quant_cb = Mat::zeros(Size(8, 8), CV_32F);
         Mat quant_cr = Mat::zeros(Size(8, 8), CV_32F);
 
-        // I frame decode
-        if (mtype == 1) {
-            Mat quant_y_1(quant_y, Rect(0, 0, 8, 8));
-            Mat quant_y_2(quant_y, Rect(8, 0, 8, 8));
-            Mat quant_y_3(quant_y, Rect(0, 8, 8, 8));
-            Mat quant_y_4(quant_y, Rect(8, 8, 8, 8));
+        // split quant_y 
+        Mat quant_y_1(quant_y, Rect(0, 0, 8, 8));
+        Mat quant_y_2(quant_y, Rect(8, 0, 8, 8));
+        Mat quant_y_3(quant_y, Rect(0, 8, 8, 8));
+        Mat quant_y_4(quant_y, Rect(8, 8, 8, 8));
+
+        // decode coeffient
+        if (cbp & 32)
             decodeFixedBlock(quant_y_1, ifs);
+        if (cbp & 16)
             decodeFixedBlock(quant_y_2, ifs);
+        if (cbp & 8)
             decodeFixedBlock(quant_y_3, ifs);
+        if (cbp & 4)
             decodeFixedBlock(quant_y_4, ifs);
+        if (cbp & 2)
             decodeFixedBlock(quant_cb, ifs);
+        if (cbp & 1)
             decodeFixedBlock(quant_cr, ifs);
-        }
 
         // inverse quantity
         Mat dct_y, dct_cr, dct_cb;
@@ -141,13 +155,25 @@ int main(void) {
 
     ifs.close();
 
-    Mat RGBImage;
-    cv::cvtColor(img, RGBImage, cv::COLOR_YCrCb2RGB);
-    imwrite("rebuild/0001.jpg", RGBImage);
+    // convert the color space from YCrCb to RGB
+    cv::cvtColor(img, img, cv::COLOR_YCrCb2RGB);
 
-    // namedWindow("image", WINDOW_AUTOSIZE);
-    // imshow("image", RGBImage);
-    // waitKey(0);
+    // write into file
+    string output_filename = "rebuild/" + number + ".jpg";
+    imwrite(output_filename, img);
+
+    // save img to cache img
+    img.copyTo(cache_img);
+}
+
+int main(void) {
+    Mat cache_img;
+
+    iframeDecode(1, cache_img);
+
+    namedWindow("image", WINDOW_AUTOSIZE);
+    imshow("image", cache_img);
+    waitKey(0);
 
     return 0;
 }
